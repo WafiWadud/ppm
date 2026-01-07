@@ -39,8 +39,8 @@ typedef struct {
 } ppm_Image_t;
 
 // Function declarations
-int ppm_write(const ppm_Image_t *restrict image, PPM_FILE *file);
-ppm_Image_t *ppm_read(PPM_FILE *file);
+int ppm_write(const ppm_Image_t *restrict image, PPM_FILE *file, PPM_UINT8 maxlen);
+ppm_Image_t *ppm_read(PPM_FILE *file, PPM_UINT8 maxlen);
 
 // Helper functions
 ppm_Image_t *ppm_create_image(PPM_UINT64 width, PPM_UINT64 height);
@@ -142,7 +142,7 @@ void ppm_free_image(ppm_Image_t *img) {
   }
 }
 
-int ppm_write(const ppm_Image_t *restrict image, PPM_FILE *file) {
+int ppm_write(const ppm_Image_t *restrict image, PPM_FILE *file, PPM_UINT8 maxlen) {
   if (image == PPM_NULL || file == PPM_NULL) {
     PPM_ERROR("Invalid parameters passed to ppm_write");
     return -1;
@@ -153,8 +153,13 @@ int ppm_write(const ppm_Image_t *restrict image, PPM_FILE *file) {
     return -1;
   }
 
+  // Default to 255 if not specified
+  if (maxlen == 0) {
+    maxlen = 255;
+  }
+
   // Write PPM header (P6 format - binary)
-  PPM_FPRINTF(file, "P6\n%llu %llu\n255\n", image->width, image->height);
+  PPM_FPRINTF(file, "P6\n%llu %llu\n%d\n", image->width, image->height, maxlen);
 
   // Write pixel data
   PPM_UINT64 total_pixels = image->width * image->height;
@@ -169,7 +174,7 @@ int ppm_write(const ppm_Image_t *restrict image, PPM_FILE *file) {
   return 0;
 }
 
-ppm_Image_t *ppm_read(PPM_FILE *file) {
+ppm_Image_t *ppm_read(PPM_FILE *file, PPM_UINT8 maxlen) {
   if (file == PPM_NULL) {
     PPM_ERROR("File pointer is NULL");
     return PPM_NULL;
@@ -211,8 +216,13 @@ ppm_Image_t *ppm_read(PPM_FILE *file) {
     return PPM_NULL;
   }
 
-  if (max_val != 255) {
-    PPM_ERROR("Only 8-bit color depth supported (max value must be 255)");
+  // Default to 255 if maxlen not specified, otherwise verify file matches expected max_val
+  if (maxlen == 0) {
+    maxlen = 255;
+  }
+
+  if (max_val != maxlen) {
+    PPM_ERROR("Max color value in file does not match expected maxlen");
     return PPM_NULL;
   }
 

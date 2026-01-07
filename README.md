@@ -63,14 +63,16 @@ typedef struct {
 - Gets a pointer to the pixel at position (x, y)
 - Returns NULL if coordinates are out of bounds
 
-**`int ppm_write(const ppm_Image_t *image, PPM_FILE *file)`**
+**`int ppm_write(const ppm_Image_t *image, PPM_FILE *file, PPM_UINT8 maxlen)`**
 
 - Writes an image to a file in P6 format
+- `maxlen` - Maximum color value (0-255, defaults to 255 if 0 is passed)
 - Returns 0 on success, -1 on failure
 
-**`ppm_Image_t *ppm_read(PPM_FILE *file)`**
+**`ppm_Image_t *ppm_read(PPM_FILE *file, PPM_UINT8 maxlen)`**
 
 - Reads a P6 format PPM image from a file
+- `maxlen` - Expected maximum color value (0-255, defaults to 255 if 0 is passed)
 - Returns NULL on failure
 
 ## Customization
@@ -121,12 +123,12 @@ int main() {
         return 1;
     }
 
-    if (ppm_write(img, output) != 0) {
-        fprintf(stderr, "Failed to write image\n");
-        fclose(output);
-        ppm_free_image(img);
-        return 1;
-    }
+    if (ppm_write(img, output, 255) != 0) {
+         fprintf(stderr, "Failed to write image\n");
+         fclose(output);
+         ppm_free_image(img);
+         return 1;
+     }
 
     fclose(output);
     ppm_free_image(img);
