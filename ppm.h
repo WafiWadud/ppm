@@ -1,11 +1,80 @@
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #define PPM_STRIP_PREFIX
 #define PPM_IMPLEMENTATION
+
+// File handle type default (user can override)
+#ifndef PPM_FILE
+#include <stdio.h>
+typedef FILE PPM_FILE;
+#endif
+
+// Integer type defaults (user can override)
+#ifndef PPM_UINT64
+#include <stdint.h>
+#define PPM_UINT64 uint64_t
+#endif
+
+#ifndef PPM_UINT8
+#include <stdint.h>
+#define PPM_UINT8 uint8_t
+#endif
+
+// Memory allocation defaults (user can override)
+#ifndef PPM_MALLOC
+#include <stdlib.h>
+#define PPM_MALLOC(size) malloc(size)
+#endif
+
+#ifndef PPM_FREE
+#include <stdlib.h>
+#define PPM_FREE(ptr) free(ptr)
+#endif
+
+#ifndef PPM_NULL
+#include <stdio.h>
+#define PPM_NULL NULL
+#endif
+
+// I/O function defaults (user can override)
+#ifndef PPM_FPRINTF
+#include <stdio.h>
+#define PPM_FPRINTF fprintf
+#endif
+
+#ifndef PPM_FSCANF
+#include <stdio.h>
+#define PPM_FSCANF fscanf
+#endif
+
+#ifndef PPM_FWRITE
+#include <stdio.h>
+#define PPM_FWRITE fwrite
+#endif
+
+#ifndef PPM_FREAD
+#include <stdio.h>
+#define PPM_FREAD fread
+#endif
+
+#ifndef PPM_FGETC
+#include <stdio.h>
+#define PPM_FGETC fgetc
+#endif
+
+#ifndef PPM_UNGETC
+#include <stdio.h>
+#define PPM_UNGETC ungetc
+#endif
+
+#ifndef PPM_ERROR
+#include <stdio.h>
 #define PPM_ERROR(str) fprintf(stderr, "[ERROR] %s\n", str)
+#endif
+
+// String Function defaults
+#ifndef PPM_STRCMP
+#include <string.h>
+#define PPM_STRCMP strcmp
+#endif
 
 #if defined(PPM_STRIP_PREFIX)
 #define Pixel_t ppm_Pixel_t
@@ -19,30 +88,24 @@
 #endif
 
 typedef struct {
-  uint8_t red;
-  uint8_t green;
-  uint8_t blue;
+  PPM_UINT8 red;
+  PPM_UINT8 green;
+  PPM_UINT8 blue;
 } ppm_Pixel_t;
 
 typedef struct {
   ppm_Pixel_t *data;
-  uint64_t width;
-  uint64_t height;
+  PPM_UINT64 width;
+  PPM_UINT64 height;
 } ppm_Image_t;
-
-// File handle type - user can redefine this
-#ifndef PPM_FILE
-#include <stdio.h>
-typedef FILE PPM_FILE;
-#endif
 
 // Function declarations
 int ppm_write(const ppm_Image_t *restrict image, PPM_FILE *file);
 ppm_Image_t *ppm_read(PPM_FILE *file);
 
 // Helper functions
-ppm_Image_t *ppm_create_image(uint64_t width, uint64_t height);
-ppm_Pixel_t *ppm_get_pixel(ppm_Image_t *img, uint64_t x, uint64_t y);
+ppm_Image_t *ppm_create_image(PPM_UINT64 width, PPM_UINT64 height);
+ppm_Pixel_t *ppm_get_pixel(ppm_Image_t *img, PPM_UINT64 x, PPM_UINT64 y);
 void ppm_free_image(ppm_Image_t *img);
 
 #if defined(PPM_IMPLEMENTATION)
@@ -97,8 +160,9 @@ int ppm_write(const ppm_Image_t *restrict image, PPM_FILE *file) {
   PPM_FPRINTF(file, "P6\n%lu %lu\n255\n", image->width, image->height);
 
   // Write pixel data
-  size_t total_pixels = image->width * image->height;
-  size_t written = fwrite(image->data, sizeof(ppm_Pixel_t), total_pixels, file);
+  PPM_UINT64 total_pixels = image->width * image->height;
+  PPM_UINT64 written =
+      PPM_FWRITE(image->data, sizeof(ppm_Pixel_t), total_pixels, file);
 
   if (written != total_pixels) {
     PPM_ERROR("Failed to write all pixel data");
@@ -108,74 +172,67 @@ int ppm_write(const ppm_Image_t *restrict image, PPM_FILE *file) {
   return 0;
 }
 
-ppm_Image_t *ppm_read(FILE *file) {
-  if (file == NULL) {
+ppm_Image_t *ppm_read(PPM_FILE *file) {
+  if (file == PPM_NULL) {
     PPM_ERROR("File pointer is NULL");
-    return NULL;
+    return PPM_NULL;
   }
 
   char magic[3];
-  uint64_t width, height, max_val;
+  PPM_UINT64 width, height, max_val;
 
   // Read magic number
-  if (fscanf(file, "%2s", magic) != 1) {
+  if (PPM_FSCANF(file, "%2s", magic) != 1) {
     PPM_ERROR("Failed to read magic number");
-    return NULL;
+    return PPM_NULL;
   }
 
-  if (strcmp(magic, "P6") != 0) {
+  if (PPM_STRCMP(magic, "P6") != 0) {
     PPM_ERROR("Unsupported PPM format (only P6 supported)");
-    return NULL;
+    return PPM_NULL;
   }
 
   // Skip whitespace and comments
   int c;
-  while ((c = fgetc(file)) != EOF) {
+  while ((c = PPM_FGETC(file)) != EOF) {
     if (c == '#') {
-      // Skip comment line
-      while ((c = fgetc(file)) != EOF && c != '\n')
+      while ((c = PPM_FGETC(file)) != EOF && c != '\n')
         ;
     } else if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
-      ungetc(c, file);
+      PPM_UNGETC(c, file);
       break;
     }
   }
 
-  // Read width and height
-  if (fscanf(file, "%lu %lu", &width, &height) != 2) {
+  if (PPM_FSCANF(file, "%lu %lu", &width, &height) != 2) {
     PPM_ERROR("Failed to read image dimensions");
-    return NULL;
+    return PPM_NULL;
   }
 
-  // Read max color value
-  if (fscanf(file, "%lu", &max_val) != 1) {
+  if (PPM_FSCANF(file, "%lu", &max_val) != 1) {
     PPM_ERROR("Failed to read max color value");
-    return NULL;
+    return PPM_NULL;
   }
 
   if (max_val != 255) {
     PPM_ERROR("Only 8-bit color depth supported (max value must be 255)");
-    return NULL;
+    return PPM_NULL;
   }
 
-  // Skip single whitespace character after header
-  fgetc(file);
+  PPM_FGETC(file); // Skip single whitespace character
 
-  // Create image
   ppm_Image_t *img = ppm_create_image(width, height);
-  if (img == NULL) {
-    return NULL;
-  }
+  if (img == PPM_NULL)
+    return PPM_NULL;
 
-  // Read pixel data
-  size_t total_pixels = width * height;
-  size_t read_pixels =
-      fread(img->data, sizeof(ppm_Pixel_t), total_pixels, file);
+  PPM_UINT64 total_pixels = width * height;
+  PPM_UINT64 read_pixels =
+      PPM_FREAD(img->data, sizeof(ppm_Pixel_t), total_pixels, file);
 
   if (read_pixels != total_pixels) {
     PPM_ERROR("Failed to read all pixel data");
     ppm_free_image(img);
-    return NULL;
+    return PPM_NULL;
   }
 
   return img;
