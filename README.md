@@ -93,23 +93,24 @@ Create a simple red square image:
 #define PPM_IMPLEMENTATION
 #include "ppm.h"
 #include <stdio.h>
+#include <string.h>
 
 int main() {
-    // Create a 256x256 image
-    ppm_Image_t *img = ppm_create_image(256, 256);
+    const int width = 256;
+    const int height = 256;
+
+    // Create image with specified dimensions
+    ppm_Image_t *img = ppm_create_image(width, height);
     if (!img) {
         fprintf(stderr, "Failed to create image\n");
         return 1;
     }
 
-    // Fill with red color
-    for (int y = 0; y < 256; y++) {
-        for (int x = 0; x < 256; x++) {
-            ppm_Pixel_t *pixel = ppm_get_pixel(img, x, y);
-            pixel->red = 255;
-            pixel->green = 0;
-            pixel->blue = 0;
-        }
+    // Fill all pixels with red color
+    for (int i = 0; i < width * height; i++) {
+        img->data[i].red = 255;
+        img->data[i].green = 0;
+        img->data[i].blue = 0;
     }
 
     // Write to file
