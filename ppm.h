@@ -104,6 +104,10 @@
 // macros for LP64 (Linux/macOS) and LLP64 (Win64) ABIs.
 // ============================================================
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef unsigned char ppm_u8;   /* 8-bit unsigned                */
 typedef unsigned short ppm_u16; /* 16-bit unsigned               */
 typedef unsigned int ppm_u32;   /* 32-bit unsigned               */
@@ -1005,3 +1009,7 @@ ppm_Image_t *ppm_read(PPM_FILE file) {
 }
 
 #endif /* PPM_IMPLEMENTATION */
+
+#ifdef __cplusplus
+}
+#endif
