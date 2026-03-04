@@ -1,25 +1,32 @@
 # PPM - Portable PixMap Image Library
 
-A single-header C library for reading and writing PPM (Portable PixMap) image files. Supports the P6 binary format with 8-bit color depth.
+A single-header C library for reading and writing PPM (Portable PixMap) image files in P6 binary format with 8-bit color depth. **Zero stdlib dependencies** — no libc, no system headers required.
 
 ## Features
 
-- **Single-header library** - Just include `ppm.h` to get started
-- **Customizable allocators** - Override malloc, free, and I/O functions
-- **Flexible type system** - Customize integer and file types
-- **Memory efficient** - Direct pixel buffer access
-- **Error handling** - Comprehensive error reporting
+- **Single-header library** — just `#define PPM_IMPLEMENTATION` and include `ppm.h`
+- **Zero stdlib dependencies** — uses raw Linux syscalls for I/O and `mmap`/`munmap` for memory; no libc, no system headers pulled in
+- **Fully overridable** — swap out syscall numbers, allocator, or error handler via `#define` before including
+- **Buffered I/O** — 4 KiB read buffer and 64 KiB write buffer to keep syscall overhead low
+- **Overflow-safe** — dimension and allocation size checked before any `mmap` call
+- **Error reporting** — writes descriptive messages to `stderr` (fd 2) without `fprintf`
 
 ## Installation
 
-Simply copy `ppm.h` to your project and include it in your source file.
+Copy `ppm.h` into your project. No other files needed.
 
 ## Usage
 
-To use the library, define `PPM_IMPLEMENTATION` before including the header in one of your source files:
+Define `PPM_IMPLEMENTATION` in exactly one translation unit before including the header:
 
 ```c
 #define PPM_IMPLEMENTATION
+#include "ppm.h"
+```
+
+Other translation units that only use the API can include without the define:
+
+```c
 #include "ppm.h"
 ```
 
@@ -27,125 +34,161 @@ To use the library, define `PPM_IMPLEMENTATION` before including the header in o
 
 ### Types
 
-**`ppm_Pixel_t`** - Represents a single pixel
+**`ppm_Pixel_t`** — a single RGB pixel
 
 ```c
 typedef struct {
-  PPM_UINT8 red;
-  PPM_UINT8 green;
-  PPM_UINT8 blue;
+    ppm_u8 red;
+    ppm_u8 green;
+    ppm_u8 blue;
 } ppm_Pixel_t;
 ```
 
-**`ppm_Image_t`** - Represents an image
+**`ppm_Image_t`** — an image
 
 ```c
 typedef struct {
-  ppm_Pixel_t *data;  // Pixel buffer (width * height elements)
-  PPM_UINT64 width;   // Image width in pixels
-  PPM_UINT64 height;  // Image height in pixels
+    ppm_u64      width;
+    ppm_u64      height;
+    ppm_Pixel_t *data;   // row-major pixel buffer (width * height elements)
 } ppm_Image_t;
+```
+
+**`PPM_FILE`** — a thin wrapper around a raw OS file descriptor
+
+```c
+typedef struct { int fd; } PPM_FILE;
 ```
 
 ### Functions
 
-**`ppm_Image_t *ppm_create_image(PPM_UINT64 width, PPM_UINT64 height)`**
+**`PPM_FILE ppm_open(const char *path, int flags, int mode)`**
 
-- Creates a new image with the specified dimensions
-- Returns NULL on failure
+Opens a file. Use the provided flag constants:
+
+```c
+PPM_O_RDONLY   // open for reading
+PPM_O_WRONLY   // open for writing
+PPM_O_CREAT    // create if it doesn't exist (combine with PPM_O_WRONLY)
+PPM_O_TRUNC    // truncate to zero length on open
+PPM_MODE_644   // permission bits for newly created files (rw-r--r--)
+```
+
+**`void ppm_close(PPM_FILE f)`**
+
+Closes a file handle.
+
+**`ppm_Image_t *ppm_create_image(ppm_u64 width, ppm_u64 height)`**
+
+Allocates a new image with the given dimensions. Returns `NULL` on invalid dimensions or allocation failure.
 
 **`void ppm_free_image(ppm_Image_t *img)`**
 
-- Frees all memory associated with an image
+Frees all memory associated with an image. Safe to call with `NULL`.
 
-**`ppm_Pixel_t *ppm_get_pixel(ppm_Image_t *img, PPM_UINT64 x, PPM_UINT64 y)`**
+**`ppm_Pixel_t *ppm_get_pixel(ppm_Image_t *img, ppm_u64 x, ppm_u64 y)`**
 
-- Gets a pointer to the pixel at position (x, y)
-- Returns NULL if coordinates are out of bounds
+Returns a pointer to the pixel at `(x, y)`. Returns `NULL` if out of bounds or `img` is `NULL`.
 
-**`int ppm_write(const ppm_Image_t *image, PPM_FILE *file, PPM_UINT8 maxlen)`**
+**`int ppm_write(const ppm_Image_t *image, PPM_FILE file)`**
 
-- Writes an image to a file in P6 format
-- `maxlen` - Maximum color value (0-255, defaults to 255 if 0 is passed)
-- Returns 0 on success, -1 on failure
+Writes the image to `file` in P6 binary PPM format. Returns `0` on success, `-1` on failure.
 
-**`ppm_Image_t *ppm_read(PPM_FILE *file, PPM_UINT8 maxlen)`**
+**`ppm_Image_t *ppm_read(PPM_FILE file)`**
 
-- Reads a P6 format PPM image from a file
-- `maxlen` - Expected maximum color value (0-255, defaults to 255 if 0 is passed)
-- Returns NULL on failure
+Reads a P6 binary PPM image from `file`. Returns `NULL` on failure. Only 8-bit images (maxval ≤ 255) are supported.
 
 ## Customization
 
-The library allows customization through preprocessor defines:
+All platform-specific behaviour can be overridden before `#define PPM_IMPLEMENTATION`:
 
-- `PPM_FILE` - File handle type (default: `FILE`)
-- `PPM_UINT64` - 64-bit unsigned integer type
-- `PPM_UINT8` - 8-bit unsigned integer type
-- `PPM_MALLOC` - Memory allocation function
-- `PPM_FREE` - Memory deallocation function
-- `PPM_FPRINTF`, `PPM_FSCANF`, `PPM_FWRITE`, `PPM_FREAD` - I/O functions
-- `PPM_STRIP_PREFIX` - Remove `ppm_` prefix from function and type names
+### Syscall numbers (default: x86-64 Linux)
+
+```c
+#define PPM_SYS_READ    0
+#define PPM_SYS_WRITE   1
+#define PPM_SYS_OPEN    2
+#define PPM_SYS_CLOSE   3
+#define PPM_SYS_MMAP    9
+#define PPM_SYS_MUNMAP  11
+```
+
+### Syscall shims
+
+Replace the inline assembly entirely for non-x86-64 targets:
+
+```c
+#define PPM_SYSCALL3(n, a, b, c)          your_syscall3(n, a, b, c)
+#define PPM_SYSCALL6(n, a, b, c, d, e, f) your_syscall6(n, a, b, c, d, e, f)
+```
+
+### Memory
+
+```c
+#define PPM_ALLOC(size)        your_alloc(size)
+#define PPM_DEALLOC(ptr, size) your_dealloc(ptr, size)
+```
+
+Note that `PPM_DEALLOC` receives the allocation size, since the default `munmap` implementation needs it. If you override with a `malloc`/`free`-style allocator you can simply ignore the size argument.
+
+### Error reporting
+
+```c
+#define PPM_ERROR(msg) your_error_handler(msg)
+```
+
+### Prefix stripping
+
+Define `PPM_STRIP_PREFIX` to expose the API without the `ppm_` prefix (`Pixel_t`, `Image_t`, `get_pixel`, etc.).
 
 ## Example
 
-Create a simple red square image:
+Create a 256×256 gradient image and save it to disk:
 
 ```c
 #define PPM_IMPLEMENTATION
 #include "ppm.h"
-#include <stdio.h>
-#include <string.h>
 
-int main() {
-    const int width = 256;
-    const int height = 256;
+void _start(void) {
+    ppm_Image_t *img = ppm_create_image(256, 256);
 
-    // Create image with specified dimensions
-    ppm_Image_t *img = ppm_create_image(width, height);
-    if (!img) {
-        fprintf(stderr, "Failed to create image\n");
-        return 1;
+    for (ppm_u64 y = 0; y < 256; y++) {
+        for (ppm_u64 x = 0; x < 256; x++) {
+            ppm_Pixel_t *px = ppm_get_pixel(img, x, y);
+            px->red   = (ppm_u8)x;
+            px->green = (ppm_u8)y;
+            px->blue  = 128;
+        }
     }
 
-    // Fill all pixels with red color
-    for (int i = 0; i < width * height; i++) {
-        img->data[i].red = 255;
-        img->data[i].green = 0;
-        img->data[i].blue = 0;
-    }
-
-    // Write to file
-    FILE *output = fopen("red_square.ppm", "wb");
-    if (!output) {
-        fprintf(stderr, "Failed to open output file\n");
-        ppm_free_image(img);
-        return 1;
-    }
-
-    if (ppm_write(img, output, 255) != 0) {
-         fprintf(stderr, "Failed to write image\n");
-         fclose(output);
-         ppm_free_image(img);
-         return 1;
-     }
-
-    fclose(output);
+    PPM_FILE out = ppm_open("gradient.ppm",
+                            PPM_O_WRONLY | PPM_O_CREAT | PPM_O_TRUNC,
+                            PPM_MODE_644);
+    ppm_write(img, out);
+    ppm_close(out);
     ppm_free_image(img);
-
-    printf("Image written to red_square.ppm\n");
-    return 0;
 }
 ```
 
-Compile with:
+Compile with no stdlib:
 
 ```bash
-gcc -o example example.c
+gcc -O2 -nostdlib -nodefaultlibs -nostartfiles -ffreestanding -o example example.c
 ./example
 ```
 
-This creates a `red_square.ppm` file that can be opened with any image viewer that supports PPM format.
+Or alongside libc if you prefer a normal `main()`:
+
+```bash
+gcc -O2 -o example example.c
+./example
+```
+
+Both produce a valid `gradient.ppm` viewable in any image viewer that supports PPM.
+
+## Platform Support
+
+The default implementation targets **x86-64 Linux**. Porting to other targets requires overriding the syscall numbers and shims (see Customization above). The type system works on both LP64 (Linux/macOS 64-bit) and LLP64 (Windows 64-bit) targets.
 
 ## License
 
