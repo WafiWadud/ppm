@@ -1,15 +1,25 @@
 # PPM - Portable PixMap Image Library
 
-A single-header C library for reading and writing PPM (Portable PixMap) image files in P6 binary format with 8-bit color depth. **Zero stdlib dependencies** — no libc, no system headers required.
+A single-header C library for reading and writing PPM (Portable PixMap) image
+files in P6 binary format with 8-bit color depth. **Zero stdlib dependencies**
+— no libc, no system headers required.
 
 ## Features
 
-- **Single-header library** — just `#define PPM_IMPLEMENTATION` and include `ppm.h`
-- **Zero stdlib dependencies** — uses raw Linux syscalls for I/O and `mmap`/`munmap` for memory; no libc, no system headers pulled in
-- **Fully overridable** — swap out syscall numbers, allocator, or error handler via `#define` before including
-- **Buffered I/O** — 4 KiB read buffer and 64 KiB write buffer to keep syscall overhead low
-- **Overflow-safe** — dimension and allocation size checked before any `mmap` call
-- **Error reporting** — writes descriptive messages to `stderr` (fd 2) without `fprintf`
+- **Single-header library** — just `#define PPM_IMPLEMENTATION` and include
+  `ppm.h`
+- **Zero stdlib dependencies** — uses raw Linux syscalls for I/O and
+  `mmap`/`munmap` for memory; no libc, no system headers pulled in
+- **Fully overridable** — swap out syscall numbers, allocator, or error handler
+  via `#define` before including
+- **Buffered I/O** — 4 KiB read buffer and 64 KiB write buffer to keep syscall
+  overhead low
+- **Overflow-safe** — dimension and allocation size checked before any `mmap`
+  call
+- **Error reporting** — writes descriptive messages to `stderr` (fd 2) without
+  `fprintf`
+- **Python bindings** — SWIG interface file (`ppm.i`) included for generating
+  Python bindings
 
 ## Installation
 
@@ -17,7 +27,8 @@ Copy `ppm.h` into your project. No other files needed.
 
 ## Usage
 
-Define `PPM_IMPLEMENTATION` in exactly one translation unit before including the header:
+Define `PPM_IMPLEMENTATION` in exactly one translation unit before including
+the header:
 
 ```c
 #define PPM_IMPLEMENTATION
@@ -29,6 +40,35 @@ Other translation units that only use the API can include without the define:
 ```c
 #include "ppm.h"
 ```
+
+## Python Bindings
+
+Python bindings are provided via a [SWIG](https://www.swig.org/) interface file
+(`ppm.i`). To generate and build the bindings:
+
+```bash
+swig -python ./ppm.i
+clang -shared -fPIC -Wall -Wextra -O3 -march=native -fdefer-ts -flto
+-ffast-math -fno-ident -fno-asynchronous-unwind-tables -fno-stack-protector
+-funroll-loops -fomit-frame-pointer -ffunction-sections -fdata-sections
+-ffreestanding -fno-exceptions -Wl,--gc-sections,--strip-all $(pkg-config
+--cflags --libs python3) ./ppm_wrap.c -o _ppm.so
+```
+
+This produces `ppm.py` and `_ppm.so` in the current directory. Once built, you
+can import the module directly in Python:
+
+```python
+import ppm
+
+img = ppm.ppm_create_image(256, 256)
+# ... work with the image ...
+ppm.ppm_free_image(img)
+```
+
+> **Note:** SWIG and a Python 3 development environment (`python3-dev` or
+> equivalent) must be installed. The build command uses `pkg-config` to locate
+> the correct Python include and library paths automatically.
 
 ## API Reference
 
@@ -80,7 +120,8 @@ Closes a file handle.
 
 **`ppm_Image_t *ppm_create_image(ppm_u64 width, ppm_u64 height)`**
 
-Allocates a new image with the given dimensions. Returns `NULL` on invalid dimensions or allocation failure.
+Allocates a new image with the given dimensions. Returns `NULL` on invalid
+dimensions or allocation failure.
 
 **`void ppm_free_image(ppm_Image_t *img)`**
 
@@ -88,19 +129,23 @@ Frees all memory associated with an image. Safe to call with `NULL`.
 
 **`ppm_Pixel_t *ppm_get_pixel(ppm_Image_t *img, ppm_u64 x, ppm_u64 y)`**
 
-Returns a pointer to the pixel at `(x, y)`. Returns `NULL` if out of bounds or `img` is `NULL`.
+Returns a pointer to the pixel at `(x, y)`. Returns `NULL` if out of bounds or
+`img` is `NULL`.
 
 **`int ppm_write(const ppm_Image_t *image, PPM_FILE file)`**
 
-Writes the image to `file` in P6 binary PPM format. Returns `0` on success, `-1` on failure.
+Writes the image to `file` in P6 binary PPM format. Returns `0` on success,
+`-1` on failure.
 
 **`ppm_Image_t *ppm_read(PPM_FILE file)`**
 
-Reads a P6 binary PPM image from `file`. Returns `NULL` on failure. Only 8-bit images (maxval ≤ 255) are supported.
+Reads a P6 binary PPM image from `file`. Returns `NULL` on failure. Only 8-bit
+images (maxval ≤ 255) are supported.
 
 ## Customization
 
-All platform-specific behaviour can be overridden before `#define PPM_IMPLEMENTATION`:
+All platform-specific behaviour can be overridden before `#define
+PPM_IMPLEMENTATION`:
 
 ### Syscall numbers (default: x86-64 Linux)
 
@@ -129,7 +174,9 @@ Replace the inline assembly entirely for non-x86-64 targets:
 #define PPM_DEALLOC(ptr, size) your_dealloc(ptr, size)
 ```
 
-Note that `PPM_DEALLOC` receives the allocation size, since the default `munmap` implementation needs it. If you override with a `malloc`/`free`-style allocator you can simply ignore the size argument.
+Note that `PPM_DEALLOC` receives the allocation size, since the default
+`munmap` implementation needs it. If you override with a `malloc`/`free`-style
+allocator you can simply ignore the size argument.
 
 ### Error reporting
 
@@ -139,7 +186,8 @@ Note that `PPM_DEALLOC` receives the allocation size, since the default `munmap`
 
 ### Prefix stripping
 
-Define `PPM_STRIP_PREFIX` to expose the API without the `ppm_` prefix (`Pixel_t`, `Image_t`, `get_pixel`, etc.).
+Define `PPM_STRIP_PREFIX` to expose the API without the `ppm_` prefix
+(`Pixel_t`, `Image_t`, `get_pixel`, etc.).
 
 ## Example
 
@@ -173,7 +221,8 @@ void _start(void) {
 Compile with no stdlib:
 
 ```bash
-gcc -O2 -nostdlib -nodefaultlibs -nostartfiles -ffreestanding -o example example.c
+gcc -O2 -nostdlib -nodefaultlibs -nostartfiles -ffreestanding -o example
+example.c
 ./example
 ```
 
@@ -184,11 +233,15 @@ gcc -O2 -o example example.c
 ./example
 ```
 
-Both produce a valid `gradient.ppm` viewable in any image viewer that supports PPM.
+Both produce a valid `gradient.ppm` viewable in any image viewer that supports
+PPM.
 
 ## Platform Support
 
-The default implementation targets **x86-64 Linux**. Porting to other targets requires overriding the syscall numbers and shims (see Customization above). The type system works on both LP64 (Linux/macOS 64-bit) and LLP64 (Windows 64-bit) targets.
+The default implementation targets **x86-64 Linux**. Porting to other targets
+requires overriding the syscall numbers and shims (see Customization above).
+The type system works on both LP64 (Linux/macOS 64-bit) and LLP64 (Windows
+64-bit) targets.
 
 ## License
 
